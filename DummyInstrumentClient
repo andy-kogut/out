@@ -1,0 +1,36 @@
+
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+public class DummyInstrumentClient {
+
+    private final String baseUrl;
+
+    public DummyInstrumentClient(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public String getInstrument() throws IOException, ParseException {
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpGet get = new HttpGet(baseUrl + "/instrument");
+            ClassicHttpResponse response = (ClassicHttpResponse) httpClient.execute(get);
+            int status = response.getCode();
+            String body = response.getEntity() == null
+                ? ""
+                : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+
+            if (status != 200) {
+                throw new IOException("Unexpected status " + status + ", body=" + body);
+            }
+
+            return body;
+        }
+    }
+}
