@@ -1,9 +1,8 @@
-import au.com.dius.pact.consumer.PactBuilder;
+import au.com.dius.pact.consumer.MessagePact;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.junit5.PactConsumerTestExt;
 import au.com.dius.pact.consumer.junit5.PactTestFor;
 import au.com.dius.pact.consumer.junit5.Pact;
-import au.com.dius.pact.core.model.V4Pact;
 import au.com.dius.pact.core.model.messaging.Message;
 
 import org.junit.jupiter.api.Test;
@@ -16,38 +15,44 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(PactConsumerTestExt.class)
-class CalendarPublicationResponseMessagePactNewTest {
+class CalendarPublicationResponseMessagePactTest {
 
-  @Pact(consumer = "caira-event-orchestrator", provider = "caira-calendar-publication")
-  public V4Pact publicationResponseMessagePact(PactBuilder builder) {
-
-    // IMPORTANT: cast to MessagePactBuilder (because PactBuilder is generic)
-    MessagePactBuilder mb = (MessagePactBuilder) builder;
+  @Pact(
+    consumer = "caira-event-orchestrator",
+    provider = "caira-calendar-publication"
+  )
+  MessagePact publicationResponseMessagePact(
+      MessagePactBuilder builder
+  ) {
 
     String body = """
       {
-        "Something": "COUNTRY"
+        "AllRegRegulatoryUnitType": "COUNTRY"
       }
       """;
 
-    return mb
-      .given("SomeProviderState")
+    return builder
       .expectsToReceive("calendar publication response event")
-      .withMetadata(md -> {
-        md.add("contentType", "application/json");
-        md.matchRegex("partitionKey", "[A-Z]{3}\\d{2}", "ABC01");
-      })
+      .withMetadata(Map.of(
+        "contentType", "application/json",
+        "partitionKey", "ABC01"
+      ))
       .withContent(body)
       .toPact();
   }
 
   @Test
   @PactTestFor(pactMethod = "publicationResponseMessagePact")
-  void shouldConsumePublicationResponseMessage(List<Message> messages) {
-    Message msg = messages.get(0);
+  void shouldConsumePublicationResponseMessage(
+      List<Message> messages
+  ) {
+    Message message = messages.get(0);
 
-    String payload = new String(msg.getContents().value(), StandardCharsets.UTF_8);
+    String payload = new String(
+        message.getContents().value(),
+        StandardCharsets.UTF_8
+    );
 
-    assertThat(payload).contains("AllRegRegulatoryUnitType");
+    assertThat(payload).contains("COUNTRY");
   }
 }
