@@ -1,0 +1,42 @@
+# Pub/Sub emulator: after each restart, creates topics + pull subscriptions from the map below.
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File .\gcp-pubsub-emulator-create-subscriptions.ps1
+#   .\gcp-pubsub-emulator-create-subscriptions.ps1 -ListOnly
+
+param(
+    [string]$EmulatorHost = "localhost:8085",
+    [string]$Project = "my-dev-project",
+    [switch]$ListOnly
+)
+
+# --- edit: topic name -> subscription names (unique sub names per project) ---
+$TopicToSubscriptions = [ordered]@{
+    "events-orders"        = @("sub-orders-worker", "sub-orders-dlq")
+    "events-inventory"     = @("sub-inventory-sync")
+    "events-notifications" = @("sub-notify-email", "sub-notify-sms", "sub-notify-push")
+    "events-audit"         = @("sub-audit-primary", "sub-audit-archive")
+    "events-billing"       = @("sub-billing-ingest", "sub-billing-reports")
+    "events-users"         = @("sub-users-profile", "sub-users-search")
+}
+
+$ErrorActionPreference = "Stop"
+$base = "http://$EmulatorHost/v1/projects/$Project"
+
+if ($ListOnly) {
+    Invoke-RestMethod -Uri "$base/subscriptions" -Method Get | ConvertTo-Json -Depth 6
+    exit 0
+}
+
+foreach ($topicName in $TopicToSubscriptions.Keys) {
+    Invoke-RestMethod -Uri "$base/topics/$topicName" -Method Put -ContentType "application/json" -Body "{}" | Out-Null
+    Write-Host "Topic: $topicName"
+    $topicFull = "projects/$Project/topics/$topicName"
+    foreach ($subName in $TopicToSubscriptions[$topicName]) {
+        $body = (@{ topic = $topicFull } | ConvertTo-Json -Compress)
+        Invoke-RestMethod -Uri "$base/subscriptions/$subName" -Method Put -ContentType "application/json" -Body $body | Out-Null
+        Write-Host "  -> $subName"
+    }
+}
+
+Write-Host "--- subscriptions ---"
+Invoke-RestMethod -Uri "$base/subscriptions" -Method Get | ConvertTo-Json -Depth 6
