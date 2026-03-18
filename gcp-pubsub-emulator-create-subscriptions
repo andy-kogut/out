@@ -22,19 +22,45 @@ $TopicToSubscriptions = [ordered]@{
 $ErrorActionPreference = "Stop"
 $base = "http://$EmulatorHost/v1/projects/$Project"
 
+function Get-HttpStatus {
+    param($Err)
+    try {
+        $r = $Err.Exception.Response
+        if ($r -and $r.StatusCode) { return [int]$r.StatusCode }
+    } catch {}
+    try {
+        if ($Err.Exception.StatusCode) { return [int]$Err.Exception.StatusCode }
+    } catch {}
+    return $null
+}
+
 if ($ListOnly) {
     Invoke-RestMethod -Uri "$base/subscriptions" -Method Get | ConvertTo-Json -Depth 6
     exit 0
 }
 
 foreach ($topicName in $TopicToSubscriptions.Keys) {
-    Invoke-RestMethod -Uri "$base/topics/$topicName" -Method Put -ContentType "application/json" -Body "{}" | Out-Null
-    Write-Host "Topic: $topicName"
+    try {
+        Invoke-RestMethod -Uri "$base/topics/$topicName" -Method Put -ContentType "application/json" -Body "{}" -ErrorAction Stop | Out-Null
+        Write-Host "Topic: $topicName (ok)"
+    } catch {
+        Write-Host "Topic: $topicName (exists or skipped: $(Get-HttpStatus $_))"
+    }
     $topicFull = "projects/$Project/topics/$topicName"
     foreach ($subName in $TopicToSubscriptions[$topicName]) {
-        $body = (@{ topic = $topicFull } | ConvertTo-Json -Compress)
-        Invoke-RestMethod -Uri "$base/subscriptions/$subName" -Method Put -ContentType "application/json" -Body $body | Out-Null
-        Write-Host "  -> $subName"
+        try {
+            $body = (@{ topic = $topicFull } | ConvertTo-Json -Compress)
+            Invoke-RestMethod -Uri "$base/subscriptions/$subName" -Method Put -ContentType "application/json" -Body $body -ErrorAction Stop | Out-Null
+            Write-Host "  -> $subName (ok)"
+        } catch {
+            $code = Get-HttpStatus $_
+            $dup = ($code -eq 409) -or ($_.Exception.Message -match 'AlreadyExists|already exists')
+            if ($dup) {
+                Write-Host "  -> $subName (skip, exists)"
+            } else {
+                Write-Warning "  -> $subName failed ($code): $($_.Exception.Message)"
+            }
+        }
     }
 }
 
